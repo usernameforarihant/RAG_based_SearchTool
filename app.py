@@ -84,21 +84,23 @@ def retrieve_course(query, top_k=3):
     try:
         # Ensure top_k doesn't exceed the number of available courses
         max_courses = min(top_k, len(course_details))
-        
-        query_embedding = openai.Embedding.create(
-            input=query, 
+
+        # Generate the embedding using the new API
+        response = openai.Embedding.create(
+            input=query,
             model="text-embedding-ada-002"
-        )["data"][0]["embedding"]
-        
+        )
+        query_embedding = response['data'][0]['embedding']
+
         query_vector = np.array(query_embedding, dtype=np.float32).reshape(1, -1)
         distances, indices = index.search(query_vector, max_courses)
-        
+
         # Validate indices
         results = []
         for i, dist in zip(indices[0], distances[0]):
             if 0 <= i < len(course_details):  # Check if index is valid
                 results.append((course_details[i], course_links[i], float(dist)))
-        
+
         return results
     except Exception as e:
         st.error(f"Error during course retrieval: {str(e)}")
