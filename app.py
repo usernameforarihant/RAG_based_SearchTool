@@ -1,237 +1,496 @@
+
+# import streamlit as st
+# import os
+# from dotenv import load_dotenv
+# from langchain.docstore.document import Document
+# from langchain.text_splitter import RecursiveCharacterTextSplitter
+# from langchain_community.vectorstores import Chroma
+# from langchain.embeddings import OpenAIEmbeddings
+# from langchain.prompts import ChatPromptTemplate
+# from langchain_openai import ChatOpenAI
+# from langchain_core.output_parsers import StrOutputParser
+# from langchain_core.runnables import RunnablePassthrough
+# import tiktoken
+
+# def init_session_state():
+#     """Initialize session state variables"""
+#     if 'openai_api_key' not in st.session_state:
+#         st.session_state['openai_api_key'] = os.getenv("OPENAI_API_KEY")
+#     if 'messages' not in st.session_state:
+#         st.session_state['messages'] = []
+#     if 'rag_chain' not in st.session_state:
+#         st.session_state['rag_chain'] = None
+
+# def load_course_data(file_path="course_details.txt"):
+#     """Load and process course details with robust encoding handling"""
+#     try:
+#         # First try UTF-8
+#         with open(file_path, 'r', encoding='utf-8') as file:
+#             text = file.read()
+#     except UnicodeDecodeError:
+#         try:
+#             # If UTF-8 fails, try with utf-8-sig (handles BOM)
+#             with open(file_path, 'r', encoding='utf-8-sig') as file:
+#                 text = file.read()
+#         except UnicodeDecodeError:
+#             # If both fail, try with latin-1
+#             with open(file_path, 'r', encoding='latin-1') as file:
+#                 text = file.read()
+    
+#     return [Document(page_content=text, metadata={"source": file_path})]
+
+# def load_course_links(file_path="course_links.txt"):
+#     """Load course links from file"""
+#     try:
+#         with open(file_path, 'r', encoding='utf-8') as file:
+#             links = file.read().splitlines()
+#         return links
+#     except Exception as e:
+#         st.error(f"Error loading course links: {str(e)}")
+#         return []
+    
+# def get_prompt_template():
+#     """Return the prompt template for the RAG system"""
+#     template = """You are an expert course advisor who helps users find the most relevant courses based on their interests and needs.
+
+# Available Context:
+# {context}
+
+# User Question: {question}
+
+# IMPORTANT: You MUST analyze and present information about ALL courses in the context that are relevant to the query. Make sure to:
+
+# 1. Review ALL courses in the provided context thoroughly
+# 2. Present EACH relevant course separately and clearly
+# 3. For EACH course, provide:
+#    - Title (exactly as shown in the context)
+#    - Complete description
+#    - Full curriculum breakdown
+#    - Key highlights and unique features
+#    - Specific relevance to the query
+
+# Format the response with clear separation between courses using headers.
+
+# If multiple courses are found:
+# - Present them in order of relevance to the query
+# - Explain how they complement or differ from each other
+# - Help the user understand the unique value of each course
+
+# If only one course is found:
+# - Explicitly mention that it's the only relevant course found
+# - Explain why other courses might not be relevant
+
+# Remember: Use ONLY information from the provided context. If you're not showing other courses, it should be because they're not in the context or not relevant, not because of processing limitations."""
+    
+#     return ChatPromptTemplate.from_template(template)
+# def initialize_rag_chain():
+#     """Initialize the RAG pipeline with improved retrieval"""
+#     try:
+#         # Load documents and links
+#         docs = load_course_data()
+#         links = load_course_links()
+        
+#         # Add links to document metadata
+#         for i, doc in enumerate(docs):
+#             doc.metadata["links"] = links
+        
+#         # Modified text splitter with larger chunk size and overlap
+#         text_splitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(
+#             chunk_size=1500,
+#             chunk_overlap=200,
+#             separators=["\nTitle:", "\n\nTitle:", "Title:", ";"]
+#         )
+#         splits = text_splitter.split_documents(docs)
+        
+#         # Add links to split documents' metadata
+#         for split in splits:
+#             split.metadata["links"] = links
+        
+#         # Initialize embeddings and vector store
+#         embeddings = OpenAIEmbeddings(openai_api_key=st.session_state['openai_api_key'])
+#         vectorstore = Chroma.from_documents(
+#             documents=splits,
+#             embedding=embeddings,
+#             persist_directory="./chromadb"
+#         )
+        
+#         # Enhanced retriever configuration
+#         retriever = vectorstore.as_retriever(
+#             search_type="mmr",
+#             search_kwargs={
+#                 "k": 8,
+#                 "fetch_k": 20,
+#                 "lambda_mult": 0.7
+#             }
+#         )
+        
+#         # Initialize LLM
+#         llm = ChatOpenAI(
+#             model="gpt-4-turbo-preview",
+#             temperature=0.2,
+#             max_tokens=4000,
+#             openai_api_key=st.session_state['openai_api_key']
+#         )
+        
+#         # Create and return RAG chain
+#         return (
+#             {"context": retriever, "question": RunnablePassthrough()}
+#             | get_prompt_template()
+#             | llm
+#             | StrOutputParser()
+#         )
+    
+#     except Exception as e:
+#         st.error(f"Error initializing RAG chain: {str(e)}")
+#         return None
+
+# # Update the get_prompt_template() function
+# def get_prompt_template():
+#     """Return the prompt template for the RAG system"""
+#     template = """You are an expert course advisor who helps users find the most relevant courses based on their interests and needs.
+
+# Available Context:
+# {context}
+
+# User Question: {question}
+
+# IMPORTANT: You MUST analyze and present information about ALL courses in the context that are relevant to the query. Make sure to:
+
+# 1. Review ALL courses in the provided context thoroughly
+# 2. Present EACH relevant course separately and clearly
+# 3. For EACH course, provide:
+#    - Title (exactly as shown in the context)
+#    - Course Link (provide the corresponding link from metadata["links"] list based on the course order)
+#    - Complete description
+#    - Full curriculum breakdown
+#    - Key highlights and unique features
+#    - Specific relevance to the query
+
+# Format the response with clear separation between courses using headers and make the title a clickable link using the corresponding course link.
+
+# If multiple courses are found:
+# - Present them in order of relevance to the query
+# - Explain how they complement or differ from each other
+# - Help the user understand the unique value of each course
+# - Include the course link for each course
+
+# If only one course is found:
+# - Explicitly mention that it's the only relevant course found
+# - Explain why other courses might not be relevant
+# - Include the course link
+
+# Remember: Use ONLY information from the provided context. If you're not showing other courses, it should be because they're not in the context or not relevant, not because of processing limitations.
+
+# Format each course title as a clickable link, for example:
+# # [Course Title](course_link)"""
+#     return ChatPromptTemplate.from_template(template)
+
+
+# def create_sidebar():
+#     """Create the sidebar with information and tips"""
+#     with st.sidebar:
+#         st.header("About")
+#         st.write("""
+#         This chatbot helps you discover courses based on your interests and needs. 
+#         It provides detailed information about:
+#         - Course content and curriculum
+#         - Key highlights
+#         - Why it's relevant to your interests
+#         """)
+        
+#         st.header("Tips")
+#         st.write("""
+#         - Be specific about your interests
+#         - Ask about particular topics or skills
+#         - Compare different courses
+#         - Ask for recommendations based on your level
+#         """)
+        
+#         # Add reset button
+#         if st.button("Reset Chat"):
+#             st.session_state['messages'] = []
+#             st.session_state['rag_chain'] = initialize_rag_chain()
+#             st.rerun()
+
+# def main():
+#     """Main function to run the Streamlit app"""
+#     # Load environment variables
+#     load_dotenv()
+    
+#     # Set page config
+#     st.set_page_config(
+#         page_title="Course Recommendation Chatbot",
+#         page_icon="🎓",
+#         layout="wide"
+#     )
+    
+#     # Initialize session state
+#     init_session_state()
+    
+#     # Create main UI
+#     st.title("🎓 Course Recommendation Chatbot")
+#     st.write("Ask me about our courses! I'll help you find the perfect learning path.")
+    
+#     # Initialize RAG chain if not already initialized
+#     if st.session_state['rag_chain'] is None:
+#         with st.spinner("Initializing the course advisor..."):
+#             st.session_state['rag_chain'] = initialize_rag_chain()
+    
+#     # Create sidebar
+#     create_sidebar()
+    
+#     # Display chat history
+#     for message in st.session_state.messages:
+#         with st.chat_message(message["role"]):
+#             st.markdown(message["content"])
+    
+#     # Chat input
+#     if query := st.chat_input("What courses are you interested in?"):
+#         # Display user message
+#         with st.chat_message("user"):
+#             st.markdown(query)
+#         st.session_state.messages.append({"role": "user", "content": query})
+        
+#         # Generate and display response
+#         with st.chat_message("assistant"):
+#             with st.spinner("Searching for relevant courses..."):
+#                 if st.session_state['rag_chain'] is not None:
+#                     try:
+#                         response = st.session_state['rag_chain'].invoke(query)
+#                         st.markdown(response)
+#                         st.session_state.messages.append({"role": "assistant", "content": response})
+#                     except Exception as e:
+#                         st.error(f"Error generating response: {str(e)}")
+#                 else:
+#                     st.error("System not properly initialized. Please try refreshing the page.")
+
+# if __name__ == "__main__":
+#     main()
 import streamlit as st
-import openai
-import faiss
 import os
-import numpy as np
+from dotenv import load_dotenv
+from langchain.docstore.document import Document
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_community.vectorstores import Chroma
+from langchain.embeddings import OpenAIEmbeddings
+from langchain.prompts import ChatPromptTemplate
+from langchain_openai import ChatOpenAI
+from langchain_core.output_parsers import StrOutputParser
+from langchain_core.runnables import RunnablePassthrough
+import tiktoken
 
-# Page configuration and styling
-st.set_page_config(
-    page_title="Course Advisor Bot",
-    page_icon="🎓",
-    layout="centered",
-    initial_sidebar_state="expanded"
-)
+def init_session_state():
+    """Initialize session state variables"""
+    if 'openai_api_key' not in st.session_state:
+        st.session_state['openai_api_key'] = os.getenv("OPENAI_API_KEY")
+    if 'messages' not in st.session_state:
+        st.session_state['messages'] = []
+    if 'rag_chain' not in st.session_state:
+        st.session_state['rag_chain'] = None
 
-# Custom CSS
-st.markdown("""
-    <style>
-    .main {
-        padding: 2rem;
-    }
-    .stTitle {
-        color: #2c3e50;
-        font-size: 2.5rem !important;
-        padding-bottom: 1rem;
-    }
-    .stSubheader {
-        color: #34495e;
-        font-size: 1.5rem !important;
-        padding-top: 1rem;
-    }
-    .course-card {
-        padding: 1rem;
-        border-radius: 0.5rem;
-        margin: 1rem 0;
-        background-color: #f8f9fa;
-    }
-    </style>
-    """, unsafe_allow_html=True)
-
-# Load the FAISS index
-@st.cache_resource
-def load_faiss_index():
-    return faiss.read_index("course_embeddings_openai.index")
-
-# Load course data
-@st.cache_data
-def load_course_data():
+def load_course_data(file_path="course_details.txt"):
+    """Load and process course details with robust encoding handling"""
     try:
-        with open("course_details.txt", "r", encoding="utf-8") as f:
-            details = f.read().splitlines()
-        with open("course_links.txt", "r", encoding="utf-8") as f:
-            links = f.read().splitlines()
-        return details, links
-    except Exception as e:
-        st.error(f"Error loading course data: {str(e)}")
-        return [], []
-
-def process_context(retrieved_courses, max_tokens=3000):
-    """Better context processing for more relevant responses"""
-    total_tokens = 0
-    processed_context = []
+        # First try UTF-8
+        with open(file_path, 'r', encoding='utf-8') as file:
+            text = file.read()
+    except UnicodeDecodeError:
+        try:
+            # If UTF-8 fails, try with utf-8-sig (handles BOM)
+            with open(file_path, 'r', encoding='utf-8-sig') as file:
+                text = file.read()
+        except UnicodeDecodeError:
+            # If both fail, try with latin-1
+            with open(file_path, 'r', encoding='latin-1') as file:
+                text = file.read()
     
-    for course, link, similarity_score in retrieved_courses:
-        # Rough token estimation (4 chars ~ 1 token)
-        estimated_tokens = len(course) // 4
-        
-        if total_tokens + estimated_tokens > max_tokens:
-            break
-            
-        processed_context.append({
-            'content': course,
-            'link': link,
-            'relevance': 1 - similarity_score  # Convert distance to similarity
-        })
-        total_tokens += estimated_tokens
-    
-    # Sort by relevance and format context
-    processed_context.sort(key=lambda x: x['relevance'], reverse=True)
-    return "\n\n".join([f"Course (Relevance: {c['relevance']:.2f}):\n{c['content']}\nLink: {c['link']}" 
-                       for c in processed_context])
+    return [Document(page_content=text, metadata={"source": file_path})]
 
-def retrieve_course(query, top_k=3):
-    """Retrieve the most relevant courses based on the query."""
+def load_course_links(file_path="course_links.txt"):
+    """Load course links from file"""
     try:
-        # Ensure top_k doesn't exceed the number of available courses
-        max_courses = min(top_k, len(course_details))
-
-        # Generate the embedding using the new API
-        response = openai.Embedding.create(
-            input=query,
-            model="text-embedding-ada-002"
-        )
-        query_embedding = response['data'][0]['embedding']
-
-        query_vector = np.array(query_embedding, dtype=np.float32).reshape(1, -1)
-        distances, indices = index.search(query_vector, max_courses)
-
-        # Validate indices
-        results = []
-        for i, dist in zip(indices[0], distances[0]):
-            if 0 <= i < len(course_details):  # Check if index is valid
-                results.append((course_details[i], course_links[i], float(dist)))
-
-        return results
+        with open(file_path, 'r', encoding='utf-8') as file:
+            links = file.read().splitlines()
+        return links
     except Exception as e:
-        st.error(f"Error during course retrieval: {str(e)}")
+        st.error(f"Error loading course links: {str(e)}")
         return []
+    
+def get_prompt_template():
+    """Return the prompt template for the RAG system"""
+    template = """You are an expert course advisor who helps users find the most relevant courses based on their interests and needs.
 
-def generate_enhanced_response(context, query):
-    """Generate more structured and informative responses"""
+Available Context:
+{context}
+
+User Question: {question}
+
+IMPORTANT: You MUST analyze and present information about ALL courses in the context that are relevant to the query. Make sure to:
+
+1. Review ALL courses in the provided context thoroughly
+2. Present EACH relevant course separately and clearly
+3. For EACH course, provide:
+   - Title (exactly as shown in the context)
+   - Course Link (provide the corresponding link from metadata["links"] list based on the course order)
+   - Complete description
+   - Full curriculum breakdown
+   - Key highlights and unique features
+   - Specific relevance to the query
+
+Format the response with clear separation between courses using headers and make the title a clickable link using the corresponding course link.
+
+If multiple courses are found:
+- Present them in order of relevance to the query
+- Explain how they complement or differ from each other
+- Help the user understand the unique value of each course
+- Include the course link for each course
+
+If only one course is found:
+- Explicitly mention that it's the only relevant course found
+- Explain why other courses might not be relevant
+- Include the course link
+
+Remember: Use ONLY information from the provided context. If you're not showing other courses, it should be because they're not in the context or not relevant, not because of processing limitations.
+
+Format each course title as a clickable link, for example:
+# [Course Title](course_link)"""
+    
+    return ChatPromptTemplate.from_template(template)
+
+def initialize_rag_chain():
+    """Initialize the RAG pipeline with improved retrieval"""
     try:
-        messages = [
-            {"role": "system", "content": """You are a helpful course advisor. Structure your responses as follows:
-                1. Direct answer to the question
-                2. Key highlights from relevant courses
-                3. Specific course recommendations
-                Always be concise and specific."""},
-            {"role": "user", "content": f"""Context: {context}
-                
-                Question: {query}
-                
-                Please provide:
-                1. A direct answer
-                2. Key relevant points from the courses
-                3. Specific course recommendations"""}
-        ]
+        # Load documents and links
+        docs = load_course_data()
+        links = load_course_links()
         
-        response = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",
-            messages=messages,
-            temperature=0.7,
-            max_tokens=300
+        # Add links to document metadata
+        for i, doc in enumerate(docs):
+            doc.metadata["links"] = links
+        
+        # Modified text splitter with larger chunk size and overlap
+        text_splitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(
+            chunk_size=1500,
+            chunk_overlap=200,
+            separators=["\nTitle:", "\n\nTitle:", "Title:", ";"]
         )
-        return response.choices[0].message.content.strip()
-    except Exception as e:
-        st.error(f"Error generating response: {str(e)}")
-        return "I apologize, but I encountered an error generating the response."
-
-# Initialize
-index = load_faiss_index()
-course_details, course_links = load_course_data()
-
-# Validate data
-if not course_details or not course_links:
-    st.error("Failed to load course data. Please check your data files.")
-    st.stop()
-
-openai.api_key = os.getenv("OPENAI_API_KEY")
-
-# Sidebar
-with st.sidebar:
-    st.title("About")
-    st.info("""
-    This Course Advisor Bot helps you find relevant courses and answers your questions about them. 
-    Simply type your question in the search box and get personalized recommendations! 🎯
-    """)
-    
-    st.subheader("How to use")
-    st.markdown("""
-    1. Type your question in the search box
-    2. Wait for the AI to analyze your query
-    3. Get personalized course recommendations
-    4. Click on course links to learn more
-    """)
-    
-    # Add filter options
-    st.subheader("Search Settings")
-    top_k = st.slider("Number of courses to retrieve", min_value=1, max_value=5, value=3)
-
-# Main content
-st.title("🎓 Course Advisor Bot")
-st.markdown("### Your AI-powered course recommendation assistant")
-
-# Display total number of courses
-st.info(f"📚 Total courses available: {len(course_details)}")
-
-# Create two columns for search
-col1, col2 = st.columns([4, 1])
-
-# Search box with placeholder
-with col1:
-    query = st.text_input(
-        "",
-        placeholder="Ask anything about courses (e.g., 'What courses teach machine learning?')",
-        key="query"
-    )
-
-# Add a search button
-with col2:
-    search_button = st.button("🔍 Search")
-
-if query and search_button:
-    with st.spinner("🤔 Analyzing your question..."):
-        retrieved_courses = retrieve_course(query, top_k=top_k)
+        splits = text_splitter.split_documents(docs)
         
-        if retrieved_courses:
-            # Use enhanced context processing
-            context = process_context(retrieved_courses)
-            
-            # Generate and display response
-            answer = generate_enhanced_response(context, query)
-            
-            # Display the answer in a nice format
-            st.markdown("### 💡 Answer")
-            st.write(answer)
-            
-            # Display courses in a more organized way
-            st.markdown("### 📚 Recommended Courses")
-            
-            # Create tabs for different views
-            tab1, tab2 = st.tabs(["Detailed View", "Compact View"])
-            
-            with tab1:
-                for i, (course, link, similarity) in enumerate(retrieved_courses, 1):
-                    with st.expander(f"Course {i}: {course[:100]}..."):
-                        st.markdown(f"**Course Details:**")
-                        st.write(course)
-                        st.markdown(f"**Relevance Score**: {((1-similarity) * 100):.1f}%")
-                        st.markdown(f"**Course Link**: [{link}]({link})")
-            
-            with tab2:
-                for i, (course, link, similarity) in enumerate(retrieved_courses, 1):
-                    st.markdown(f"**{i}. [{course[:100]}...]({link})**")
-                    st.markdown(f"Relevance: {((1-similarity) * 100):.1f}%")
-        else:
-            st.warning("⚠️ No relevant courses found or an error occurred.")
+        # Add links to split documents' metadata
+        for split in splits:
+            split.metadata["links"] = links
+        
+        # Initialize embeddings and vector store
+        embeddings = OpenAIEmbeddings(openai_api_key=st.session_state['openai_api_key'])
+        vectorstore = Chroma.from_documents(
+            documents=splits,
+            embedding=embeddings,
+            persist_directory="./chromadb"
+        )
+        
+        # Enhanced retriever configuration
+        retriever = vectorstore.as_retriever(
+            search_type="mmr",
+            search_kwargs={
+                "k": 8,
+                "fetch_k": 20,
+                "lambda_mult": 0.7
+            }
+        )
+        
+        # Initialize LLM
+        llm = ChatOpenAI(
+            model="gpt-4-turbo-preview",
+            temperature=0.2,
+            max_tokens=4000,
+            openai_api_key=st.session_state['openai_api_key']
+        )
+        
+        # Create and return RAG chain
+        return (
+            {"context": retriever, "question": RunnablePassthrough()}
+            | get_prompt_template()
+            | llm
+            | StrOutputParser()
+        )
+    
+    except Exception as e:
+        st.error(f"Error initializing RAG chain: {str(e)}")
+        return None
 
-# Footer
-st.markdown("---")
-st.markdown(
-    """
-    <div style='text-align: center'>
-        <p>Made with ❤️ by Your Course Advisor Bot</p>
-    </div>
-    """,
-    unsafe_allow_html=True
-)
+def create_sidebar():
+    """Create the sidebar with information and tips"""
+    with st.sidebar:
+        st.header("About")
+        st.write("""This chatbot helps you discover courses based on your interests and needs. 
+        It provides detailed information about:
+        - Course content and curriculum
+        - Key highlights
+        - Why it's relevant to your interests""")
+        
+        st.header("Tips")
+        st.write("""- Be specific about your interests
+        - Ask about particular topics or skills
+        - Compare different courses
+        - Ask for recommendations based on your level""")
+        
+        # Add reset button
+        if st.button("Reset Chat"):
+            st.session_state['messages'] = []
+            st.session_state['rag_chain'] = initialize_rag_chain()
+            st.rerun()
+
+def main():
+    """Main function to run the Streamlit app"""
+    # Load environment variables
+    load_dotenv()
+    
+    # Set page config
+    st.set_page_config(
+        page_title="Course Recommendation Chatbot",
+        page_icon="🎓",
+        layout="wide"
+    )
+    
+    # Initialize session state
+    init_session_state()
+    
+    # Create main UI
+    st.title("🎓 Course Recommendation Chatbot")
+    st.write("Ask me about our courses! I'll help you find the perfect learning path.")
+    
+    # Initialize RAG chain if not already initialized
+    if st.session_state['rag_chain'] is None:
+        with st.spinner("Initializing the course advisor..."):
+            st.session_state['rag_chain'] = initialize_rag_chain()
+    
+    # Create sidebar
+    create_sidebar()
+    
+    # Display chat history
+    for message in st.session_state.messages:
+        with st.chat_message(message["role"]):
+            st.markdown(message["content"])
+    
+    # Chat input
+    if query := st.chat_input("What courses are you interested in?"):
+        # Display user message
+        with st.chat_message("user"):
+            st.markdown(query)
+        st.session_state.messages.append({"role": "user", "content": query})
+        
+        # Generate and display response
+        with st.chat_message("assistant"):
+            with st.spinner("Searching for relevant courses..."):
+                if st.session_state['rag_chain'] is not None:
+                    try:
+                        response = st.session_state['rag_chain'].invoke(query)
+                        st.markdown(response)
+                        st.session_state.messages.append({"role": "assistant", "content": response})
+                    except Exception as e:
+                        st.error(f"Error generating response: {str(e)}")
+                else:
+                    st.error("System not properly initialized. Please try refreshing the page.")
+
+if __name__ == "__main__":
+    main()
