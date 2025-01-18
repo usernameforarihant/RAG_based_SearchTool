@@ -8,3 +8,4 @@ tiktoken
 typing-extensions          
 pydantic                 
 numpy                    
+selenium
